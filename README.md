@@ -8,7 +8,7 @@ Overlay para Windows con telemetría de hardware y estado de cuotas de servicios
 - Modos `all`, `quotas`, `hardware` y `fps`.
 - Escala entre `0.6` y `2.0`.
 - Lecturas de CPU, GPU, memoria, ventiladores y FPS cuando existe un sensor compatible.
-- Proveedores opcionales: Antigravity, Codex, Claude, Gemini, Copilot, Grok, Cursor, OpenRouter, DeepSeek, Kimi y Perplexity.
+- Proveedores opcionales: Antigravity, Codex, ChatGPT Web (cuota separada), Claude, Gemini, Copilot, Grok, Cursor, OpenRouter, DeepSeek, Kimi y Perplexity.
 - Ventana móvil, bandeja del sistema, refresco manual y configuración persistente.
 
 ## Requisitos

@@ -16,7 +16,7 @@ class SpinningFanBadge(QWidget):
         self._size = size
         self.setFixedSize(size, size)
         self._rpm = 0.0
-        self._max_rpm = 1800.0
+        self._max_rpm = 0.0
         self._angle = 0.0
         self._is_spinning = False
 
@@ -24,9 +24,9 @@ class SpinningFanBadge(QWidget):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._on_tick)
 
-    def set_fan_speed(self, rpm: float, max_rpm: float = 1800.0):
+    def set_fan_speed(self, rpm: float, max_rpm: float = 0.0):
         self._rpm = max(0.0, float(rpm or 0.0))
-        self._max_rpm = max(100.0, float(max_rpm or 1800.0))
+        self._max_rpm = max(0.0, float(max_rpm or 0.0))
 
         if self._rpm > 0:
             if not self._is_spinning:

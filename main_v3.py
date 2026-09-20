@@ -86,7 +86,7 @@ from providers.claude_provider import ClaudeProvider
 from providers.antigravity_provider import AntigravityProvider
 from providers.lhm_provider import LHMProvider
 from providers.ai_usage_providers import (
-    CodexProvider, GeminiProvider, CopilotProvider, GrokProvider, CursorProvider,
+    CodexProvider, ChatGPTWebProvider, GeminiProvider, CopilotProvider, GrokProvider, CursorProvider,
     OpenRouterProvider, DeepSeekProvider, KimiProvider, PerplexityProvider,
 )
 from providers.base import ProviderStatus
@@ -270,7 +270,7 @@ class WidgetApp:
         self.claude = ClaudeProvider(self.config.claude_config)
         self.antigravity = AntigravityProvider(self.config.antigravity_config)
         provider_types = (
-            CodexProvider, GeminiProvider, CopilotProvider, GrokProvider, CursorProvider,
+            CodexProvider, ChatGPTWebProvider, GeminiProvider, CopilotProvider, GrokProvider, CursorProvider,
             OpenRouterProvider, DeepSeekProvider, KimiProvider, PerplexityProvider,
         )
         self.ai_providers = [
@@ -278,7 +278,7 @@ class WidgetApp:
             for provider_type in provider_types
             if self.config.ai_modules_config.get(
                 f"show_{provider_type.name}",
-                True if provider_type.name in ("codex", "copilot", "grok", "cursor") else False,
+                True if provider_type.name in ("codex", "chatgpt_web", "copilot", "grok", "cursor") else False,
             )
         ]
 
@@ -389,9 +389,14 @@ class WidgetApp:
         area = max(areas, key=lambda rect: rect.intersected(frame).width() * rect.intersected(frame).height())
         if not area.intersects(frame):
             area = self.app.primaryScreen().availableGeometry()
-        fit = min(1.0, area.width() / max(1, frame.width()), area.height() / max(1, frame.height()))
-        if fit < 1.0 and self.window.ui_scale > 0.6:
-            self.window.apply_scale(max(0.6, self.window.ui_scale * fit - 0.01), save=False)
+        for _ in range(4):
+            fit = min(1.0, area.width() / max(1, frame.width()), area.height() / max(1, frame.height()))
+            if fit >= 1.0 or self.window.ui_scale <= 0.6:
+                break
+            next_scale = max(0.6, round(self.window.ui_scale * fit - 0.01, 2))
+            if next_scale >= self.window.ui_scale:
+                next_scale = max(0.6, round(self.window.ui_scale - 0.01, 2))
+            self.window.apply_scale(next_scale, save=False)
             frame = self.window.frameGeometry()
         x = max(area.left(), min(frame.x(), area.right() - frame.width() + 1))
         y = max(area.top(), min(frame.y(), area.bottom() - frame.height() + 1))
@@ -485,6 +490,7 @@ class WidgetApp:
         }
         urls = {
             "codex": "https://developers.openai.com/codex/",
+            "chatgpt_web": "https://chatgpt.com/codex/settings/usage",
             "copilot": "https://github.com/cli/cli",
             "grok": "https://x.ai/",
             "gemini": "https://github.com/google-gemini/gemini-cli",
@@ -511,6 +517,7 @@ class WidgetApp:
         all_p_types = {
             "claude": ClaudeProvider, "antigravity": AntigravityProvider,
             "codex": CodexProvider, "gemini": GeminiProvider, "copilot": CopilotProvider,
+            "chatgpt_web": ChatGPTWebProvider,
             "grok": GrokProvider, "cursor": CursorProvider, "openrouter": OpenRouterProvider,
             "deepseek": DeepSeekProvider, "kimi": KimiProvider, "perplexity": PerplexityProvider,
         }

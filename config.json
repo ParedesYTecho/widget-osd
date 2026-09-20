@@ -19,6 +19,7 @@
     "show_claude": false,
     "show_antigravity": true,
     "show_codex": true,
+    "show_chatgpt_web": true,
     "show_gemini": false,
     "show_copilot": true,
     "show_grok": true,
@@ -39,6 +40,9 @@
   },
   "providers": {
     "codex": {
+      "refresh_interval_seconds": 300
+    },
+    "chatgpt_web": {
       "refresh_interval_seconds": 300
     },
     "gemini": {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 import json
+import math
 import os
 import subprocess
 import time
@@ -107,6 +108,70 @@ def _reset_countdown(reset_at: Any) -> str:
         return ""
 
 
+def _valid_percent(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and 0.0 <= number <= 100.0 else None
+
+
+def _rate_window_key(seconds: int, slot: str) -> tuple[str, str]:
+    if seconds and seconds <= 6 * 3600:
+        return "five_hour", "5 h"
+    if seconds and seconds <= 36 * 3600:
+        return "daily", "Diaria"
+    if seconds and seconds <= 8 * 86400:
+        return "weekly", "Semanal"
+    return slot, slot.replace("_", " ").title()
+
+
+def _rate_windows(rate: dict[str, Any], *, limit_reached: bool = False) -> dict[str, dict[str, Any]]:
+    """Normaliza ventanas del servidor sin asumir que primary es siempre 5 h."""
+    if not isinstance(rate, dict):
+        return {}
+    windows: dict[str, dict[str, Any]] = {}
+    for slot, raw in (("primary", rate.get("primary_window")), ("secondary", rate.get("secondary_window"))):
+        if not isinstance(raw, dict):
+            continue
+        used = _valid_percent(raw.get("used_percent", raw.get("usedPercent")))
+        if used is None:
+            remaining = _valid_percent(raw.get("remaining_percent", raw.get("remainingPercent")))
+            if remaining is not None:
+                used = 100.0 - remaining
+        if used is None and limit_reached:
+            used = 100.0
+        if used is None:
+            continue
+        try:
+            duration = int(float(raw.get("limit_window_seconds") or raw.get("limitWindowSeconds") or 0))
+        except (TypeError, ValueError, OverflowError):
+            duration = 0
+        key, label = _rate_window_key(duration, slot)
+        reset_at = raw.get("reset_at", raw.get("resetAt"))
+        reset_desc = _reset_countdown(reset_at) if reset_at else ""
+        if not reset_desc:
+            try:
+                seconds = max(0, int(float(raw.get("reset_after_seconds") or raw.get("resetAfterSeconds") or 0)))
+                days, remainder = divmod(seconds, 86400)
+                hours, remainder = divmod(remainder, 3600)
+                minutes = remainder // 60
+                reset_desc = f"{days}d {hours}h" if days else (f"{hours}h {minutes}m" if hours else f"{minutes}m")
+            except (TypeError, ValueError, OverflowError):
+                reset_desc = ""
+        packed = {
+            "used_percent": used,
+            "remaining_percent": max(0.0, 100.0 - used),
+            "reset_at": reset_at,
+            "reset_desc": reset_desc,
+            "label": label,
+            "limit_window_seconds": duration,
+        }
+        windows[key] = packed
+        windows[slot] = packed
+    return windows
+
+
 def _result(
     name: str,
     used: float,
@@ -178,7 +243,11 @@ class _QuotaProvider(DataProvider):
                 except (OSError, ValueError, TypeError, TimeoutError, urllib.error.URLError):
                     pass
             status = ProviderStatus.AUTH_ERROR if exc.code in (401, 403) else ProviderStatus.ERROR
-            return {"status": status, "provider": self.name, "error": f"HTTP {exc.code}"}
+            if self.name == "chatgpt_web":
+                error = "Token Web expirado o no autorizado" if exc.code == 401 else "Sesión Web no verificable con el token local"
+            else:
+                error = f"HTTP {exc.code}"
+            return {"status": status, "provider": self.name, "error": error}
         except (OSError, ValueError, TypeError, TimeoutError, urllib.error.URLError) as exc:
             return {"status": ProviderStatus.ERROR, "provider": self.name, "error": str(exc)[:160]}
 
@@ -196,85 +265,53 @@ class CodexProvider(_QuotaProvider):
     def _auth_path() -> Path:
         return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "auth.json"
 
-    def _fetch(self) -> dict[str, Any]:
-        auth = _json_file(self._auth_path())
+    @classmethod
+    def _auth_headers(cls, user_agent: str) -> tuple[str, dict[str, str]]:
+        auth = _json_file(cls._auth_path())
         tokens = auth.get("tokens", auth)
         token = str(tokens.get("access_token") or tokens.get("accessToken") or "").strip()
-        if not token:
-            return {"status": ProviderStatus.AUTH_ERROR, "provider": self.name, "error": "Inicia sesión en Codex"}
         claims = _jwt_claims(token)
         auth_claims = claims.get("https://api.openai.com/auth", {})
         account_id = str(tokens.get("account_id") or auth_claims.get("chatgpt_account_id") or "").strip()
-        headers = {"Authorization": f"Bearer {token}", "User-Agent": "codex-cli"}
+        headers = {"Authorization": f"Bearer {token}", "User-Agent": user_agent}
         if account_id:
             headers["ChatGPT-Account-Id"] = account_id
+        return token, headers
+
+    def _fetch(self) -> dict[str, Any]:
+        token, headers = self._auth_headers("codex-cli")
+        if not token:
+            return {"status": ProviderStatus.AUTH_ERROR, "provider": self.name, "error": "Inicia sesión en Codex"}
         raw = _request_json("https://chatgpt.com/backend-api/wham/usage", headers=headers)
-        rate = raw.get("rate_limit", {})
-        primary = rate.get("primary_window") or rate.get("primary") or {}
-        secondary = rate.get("secondary_window") or rate.get("secondary") or {}
-        used = float(primary.get("used_percent", primary.get("usedPercent", 0)))
-        second = secondary.get("used_percent", secondary.get("usedPercent"))
+        rate = raw.get("rate_limit") or raw.get("rateLimit") or {}
+        if not isinstance(rate, dict):
+            rate = {}
 
         limit_reached = bool(rate.get("limit_reached", False)) or (rate.get("allowed") is False)
         rate_type = raw.get("rate_limit_reached_type")
         if rate_type:
             limit_reached = True
 
-        credits_info = raw.get("credits", {})
+        credits_info = raw.get("credits") or {}
+        if not isinstance(credits_info, dict):
+            credits_info = {}
         if credits_info.get("has_credits") and credits_info.get("balance") == "0" and credits_info.get("overage_limit_reached", False):
             limit_reached = True
 
-        if limit_reached:
-            used = 100.0
-
-        reset_at = primary.get("reset_at", primary.get("resetAt"))
-        reset_desc = ""
-        if reset_at:
-            try:
-                diff_sec = int(float(reset_at) - time.time())
-                if diff_sec > 0:
-                    h = diff_sec // 3600
-                    m = (diff_sec % 3600) // 60
-                    reset_desc = f"{h}h {m}m"
-            except Exception:
-                pass
-        if not reset_desc and primary.get("reset_after_seconds"):
-            sec = int(primary.get("reset_after_seconds"))
-            h = sec // 3600
-            m = (sec % 3600) // 60
-            reset_desc = f"{h}h {m}m"
-
-        sec_reset_at = secondary.get("reset_at", secondary.get("resetAt"))
-        sec_reset_desc = _reset_countdown(sec_reset_at) if sec_reset_at else ""
+        windows = _rate_windows(rate, limit_reached=limit_reached)
+        if not windows:
+            raise ValueError("Codex no devolvió ventanas de cuota medibles")
+        main = windows.get("five_hour") or windows.get("daily") or windows.get("weekly") or next(iter(windows.values()))
+        secondary_window = windows.get("weekly") or windows.get("daily")
+        second = secondary_window.get("used_percent") if secondary_window is not None and secondary_window is not main else None
 
         return _result(
-            self.name, used, "5 h", second=second, second_label="Semanal",
-            reset_at=reset_at,
-            reset_desc=reset_desc,
+            self.name, main["used_percent"], main["label"], second=second,
+            second_label=secondary_window.get("label", "") if second is not None else "",
+            reset_at=main.get("reset_at"),
+            reset_desc=main.get("reset_desc", ""),
             plan=str(raw.get("plan_type", raw.get("planType", ""))).title(),
-            windows={
-                "primary": {
-                    "used_percent": used,
-                    "remaining_percent": max(0.0, 100.0 - used),
-                    "reset_at": reset_at,
-                    "reset_desc": reset_desc,
-                    "label": "5 h",
-                },
-                "secondary": {
-                    "used_percent": second,
-                    "remaining_percent": None if second is None else max(0.0, 100.0 - float(second)),
-                    "reset_at": sec_reset_at,
-                    "reset_desc": sec_reset_desc,
-                    "label": "Semanal",
-                },
-                "weekly": {
-                    "used_percent": second,
-                    "remaining_percent": None if second is None else max(0.0, 100.0 - float(second)),
-                    "reset_at": sec_reset_at,
-                    "reset_desc": sec_reset_desc,
-                    "label": "Semanal",
-                },
-            }
+            windows=windows,
         )
 
     def _refresh_credentials(self) -> bool:
@@ -298,6 +335,46 @@ class CodexProvider(_QuotaProvider):
         return bool(tokens.get("access_token"))
 
 
+class ChatGPTWebProvider(CodexProvider):
+    """Cuota Web separada; nunca reutiliza la cuota Codex si el endpoint no la expone."""
+
+    name = "chatgpt_web"
+
+    def _fetch(self) -> dict[str, Any]:
+        token, headers = self._auth_headers("Mozilla/5.0")
+        if not token:
+            return {
+                "status": ProviderStatus.AUTH_ERROR,
+                "provider": self.name,
+                "error": "Inicia sesión en ChatGPT Web",
+            }
+        raw = _request_json("https://chatgpt.com/backend-api/usage", headers=headers)
+        rate = raw.get("rate_limit") or raw.get("rateLimit") or {}
+        if not isinstance(rate, dict):
+            rate = {}
+        windows = _rate_windows(rate, limit_reached=bool(rate.get("limit_reached") or rate.get("allowed") is False))
+        if not windows:
+            return {
+                "status": ProviderStatus.STALE,
+                "provider": self.name,
+                "error": "ChatGPT Web no publicó una cuota medible",
+                "windows": {},
+            }
+        main = windows.get("five_hour") or windows.get("daily") or windows.get("weekly") or next(iter(windows.values()))
+        return _result(
+            self.name,
+            main["used_percent"],
+            main["label"],
+            reset_at=main.get("reset_at"),
+            reset_desc=main.get("reset_desc", ""),
+            plan=str(raw.get("plan_type") or raw.get("planType") or "ChatGPT Web").title(),
+            windows=windows,
+        )
+
+    def _refresh_credentials(self) -> bool:
+        return False
+
+
 class GeminiProvider(_QuotaProvider):
     name = "gemini"
 
@@ -313,24 +390,25 @@ class GeminiProvider(_QuotaProvider):
                 models = fallback.get("models", [])
                 second = models[1].get("usage_percent") if len(models) > 1 else None
                 fallback_windows = fallback.get("windows") or {}
-                primary_window = fallback_windows.get("weekly") or fallback_windows.get("primary") or {}
-                weekly = {
-                    "label": "Semanal",
-                    "used_percent": primary_window.get("usage_percent", used),
-                    "remaining_percent": primary_window.get("remaining_percent", 100.0 - used),
-                    "reset_at": primary_window.get("reset_time", fallback.get("reset_time")),
-                    "reset_desc": primary_window.get("reset_desc", fallback.get("reset_desc", "")),
-                }
-                return _result(
-                    self.name, used, "Antigravity",
-                    second=second,
-                    second_label="Flash" if second is not None else "",
-                    reset_at=fallback.get("reset_time"),
-                    reset_desc=fallback.get("reset_desc", ""),
-                    plan="Antigravity",
-                    details=models,
-                    windows={"weekly": weekly},
-                )
+                primary_window = fallback_windows.get("weekly") or {}
+                if primary_window:
+                    weekly = {
+                        "label": "Semanal",
+                        "used_percent": primary_window.get("usage_percent", used),
+                        "remaining_percent": primary_window.get("remaining_percent", 100.0 - used),
+                        "reset_at": primary_window.get("reset_time", fallback.get("reset_time")),
+                        "reset_desc": primary_window.get("reset_desc", fallback.get("reset_desc", "")),
+                    }
+                    return _result(
+                        self.name, used, "Antigravity",
+                        second=second,
+                        second_label="Flash" if second is not None else "",
+                        reset_at=fallback.get("reset_time"),
+                        reset_desc=fallback.get("reset_desc", ""),
+                        plan="Antigravity",
+                        details=models,
+                        windows={"weekly": weekly},
+                    )
         except Exception:
             pass
 
@@ -460,15 +538,16 @@ class CopilotProvider(_QuotaProvider):
 
         def used(item: dict[str, Any]) -> float | None:
             remaining = item.get("percentRemaining", item.get("percent_remaining"))
-            return None if remaining is None else 100.0 - float(remaining)
+            remaining_percent = _valid_percent(remaining)
+            return None if remaining_percent is None else 100.0 - remaining_percent
 
         primary = used(premium)
         secondary = used(chat)
         if primary is None and secondary is None:
             raise ValueError("Copilot no devolvió una cuota medible")
 
-        remaining_count = premium.get("remaining")
-        entitlement = premium.get("entitlement")
+        remaining_count = premium.get("remaining", premium.get("quota_remaining"))
+        entitlement = premium.get("entitlement", premium.get("quota_entitlement"))
         credits_used = premium.get("credits_used")
         if credits_used is None and remaining_count is not None and entitlement is not None:
             try:
@@ -476,13 +555,20 @@ class CopilotProvider(_QuotaProvider):
             except (TypeError, ValueError):
                 credits_used = None
 
-        raw_reset = raw.get("quotaResetDate", raw.get("quota_reset_date"))
+        raw_reset = (
+            raw.get("quotaResetDate", raw.get("quota_reset_date"))
+            or premium.get("quotaResetAt", premium.get("quota_reset_at"))
+            or chat.get("quotaResetAt", chat.get("quota_reset_at"))
+        )
         reset_desc = ""
         if raw_reset:
             try:
-                dt = datetime.fromisoformat(str(raw_reset).replace("Z", "+00:00"))
-                months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-                reset_desc = f"{dt.day} {months[dt.month - 1]} {dt.year}"
+                if isinstance(raw_reset, (int, float)):
+                    reset_desc = _reset_countdown(raw_reset)
+                else:
+                    dt = datetime.fromisoformat(str(raw_reset).replace("Z", "+00:00"))
+                    months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+                    reset_desc = f"{dt.day} {months[dt.month - 1]} {dt.year}"
             except Exception:
                 reset_desc = str(raw_reset)
 
@@ -493,6 +579,24 @@ class CopilotProvider(_QuotaProvider):
         if primary is None:
             primary, primary_label, secondary = secondary, "Chat", None
 
+        windows: dict[str, dict[str, Any]] = {}
+        if primary is not None:
+            windows["premium"] = {
+                "label": "Premium" if primary_label != "Chat" else "Chat",
+                "used_percent": primary,
+                "remaining_percent": 100.0 - primary,
+                "reset_at": raw_reset,
+                "reset_desc": reset_desc,
+            }
+        if secondary is not None:
+            windows["chat"] = {
+                "label": "Chat",
+                "used_percent": secondary,
+                "remaining_percent": 100.0 - secondary,
+                "reset_at": chat.get("quotaResetAt", chat.get("quota_reset_at")),
+                "reset_desc": _reset_countdown(chat.get("quotaResetAt", chat.get("quota_reset_at"))) if chat.get("quotaResetAt", chat.get("quota_reset_at")) else reset_desc,
+            }
+
         return _result(
             self.name, primary, primary_label, second=secondary, second_label="Chat",
             reset_at=raw_reset,
@@ -501,6 +605,7 @@ class CopilotProvider(_QuotaProvider):
             count_total=entitlement,
             count_used=credits_used,
             plan=str(raw.get("copilotPlan", raw.get("copilot_plan", "Copilot"))).title(),
+            windows=windows,
         )
 
 

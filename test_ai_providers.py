@@ -55,6 +55,53 @@ def main() -> None:
         assert chat_only["primary_label"] == "Chat"
         assert chat_only["used_percent"] == 19
         assert chat_only["secondary_used_percent"] is None
+        assert chat_only["reset_desc"] == ""
+
+        auth_fixture = {"tokens": {"access_token": "fixture-access-token"}}
+        providers._json_file = lambda *args, **kwargs: auth_fixture
+        codex_urls = []
+
+        def codex_usage(url, *args, **kwargs):
+            codex_urls.append(url)
+            return {
+                "plan_type": "plus",
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 25,
+                        "limit_window_seconds": 18_000,
+                        "reset_after_seconds": 1_800,
+                    },
+                    "secondary_window": {
+                        "used_percent": 40,
+                        "limit_window_seconds": 604_800,
+                        "reset_after_seconds": 518_400,
+                    },
+                },
+            }
+
+        providers._request_json = codex_usage
+        codex = providers.CodexProvider().fetch()
+        assert codex_urls == ["https://chatgpt.com/backend-api/wham/usage"]
+        assert codex["primary_label"] == "5 h"
+        assert codex["windows"]["five_hour"]["remaining_percent"] == 75
+        assert codex["windows"]["weekly"]["remaining_percent"] == 60
+        assert codex["secondary_label"] == "Semanal"
+        daily = providers._rate_windows({
+            "primary_window": {"used_percent": 10, "limit_window_seconds": 86_400},
+        })
+        assert daily["daily"]["label"] == "Diaria"
+
+        web_urls = []
+
+        def web_usage(url, *args, **kwargs):
+            web_urls.append(url)
+            return {"rate_limit": {}}
+
+        providers._request_json = web_usage
+        web = providers.ChatGPTWebProvider().fetch()
+        assert web["status"] == ProviderStatus.STALE
+        assert web["provider"] == "chatgpt_web"
+        assert web_urls == ["https://chatgpt.com/backend-api/usage"]
 
         ag = AntigravityProvider()
         exhausted = ag._parse_language_server_data({
@@ -116,7 +163,7 @@ def main() -> None:
                 "reset_time": "2026-09-21T12:00:00Z",
                 "models": [],
                 "windows": {
-                    "primary": {
+                    "weekly": {
                         "remaining_percent": 60.0,
                         "usage_percent": 40.0,
                         "reset_desc": "6d 23h",
@@ -289,12 +336,16 @@ def main() -> None:
 
         # BentoWindow Contract & Dynamic Card reflow
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
         from PySide6.QtWidgets import QApplication, QLabel
         from ui.bento_window import BentoWindow
 
         app = QApplication.instance() or QApplication([])
         win = BentoWindow()
-        assert set(win.ai_cards) == {"codex", "gemini", "copilot", "grok", "cursor"}
+        win.show()
+        app.processEvents()
+        assert set(win.ai_cards) == {"codex", "chatgpt_web", "gemini", "copilot", "grok", "cursor"}
         assert win.bento_ai_cards["cursor"]["value"].text() == "--"
         assert win.cyber_ai_cards["codex"]["reset"].text() == "Actualizando"
         assert win.cyber_ai_cards["codex"]["val"].text() == "--"
@@ -341,14 +392,14 @@ def main() -> None:
             }],
         })
         assert win.bento_val_ag.text() == "8%"
-        assert win.bento_sub_ag.text() == "Cuota 5h"
-        assert win.bento_foot_ag.text() == "Sem 8% · 49h 0m"
-        assert win.bento_pill_ag.text() == "4h 59m"
+        assert win.bento_sub_ag.text() == "Cuota modelo"
+        assert win.bento_foot_ag.text() == "Sem 8% · 49h 0m · 5h reinicia 4h 59m"
+        assert win.bento_pill_ag.text() == "49h 0m"
         assert "Gemini Pro: 8.0%" in win.bento_card_ag.toolTip()
 
         win.update_quota_provider("copilot", counted_copilot)
         assert win.bento_ai_cards["copilot"]["value"].text() == "37/200"
-        assert win.bento_ai_cards["copilot"]["subtitle"].text() == "premium used"
+        assert win.bento_ai_cards["copilot"]["subtitle"].text() == "premium usado"
         assert win.bento_ai_cards["copilot"]["foot"].text() == "1 Oct"
         assert "Esperando" not in win.bento_ai_cards["copilot"]["subtitle"].text()
 
@@ -362,15 +413,17 @@ def main() -> None:
             "remaining_percent": 80.0,
             "reset_desc": "4h 50m",
             "windows": {
-                "secondary": {"remaining_percent": 65.0, "reset_desc": "6d 23h"}
+                "primary": {"remaining_percent": 80.0, "reset_desc": "4h 50m", "label": "5 h"},
+                "secondary": {"remaining_percent": 65.0, "reset_desc": "6d 23h"},
+                "weekly": {"remaining_percent": 65.0, "reset_desc": "6d 23h", "label": "Semanal"},
             },
         }
         win.update_quota_provider("codex", codex_weekly)
         assert win.bento_ai_cards["codex"]["value"].text() == "80%"
         assert win.bento_ai_cards["codex"]["subtitle"].text() == "Cuota 5h"
         assert win.bento_ai_cards["codex"]["pill"].text() == "4h 50m"
-        assert win.bento_ai_cards["codex"]["foot"].text() == "Sem 65% · 6d 23h"
-        assert win.cyber_ai_cards["codex"]["reset"].text() == "RESET 5H: 4H 50M · SEM: 65% / 6D 23H"
+        assert win.bento_ai_cards["codex"]["foot"].text() == "Semanal 65% · 6d 23h"
+        assert win.cyber_ai_cards["codex"]["reset"].text() == "RESET 5 H: 4H 50M · SEMANAL: 65% / 6D 23H"
         assert not win.bento_ai_cards["codex"]["gauge"].isHidden()
         assert win.bento_ai_cards["codex"]["gauge"].value() == 80.0
         assert not win.bento_ai_cards["codex"]["pill"].isHidden()
@@ -413,6 +466,20 @@ def main() -> None:
         win._cycle_card_mode("openrouter")
         win.update_quota_provider("openrouter", or_res)
         assert win.bento_ai_cards["openrouter"]["subtitle"].text() == "Total Usage"
+
+        old_pos = win.pos()
+        QTest.mouseClick(win.bento_card_ag, Qt.MouseButton.LeftButton)
+        assert win.card_display_modes["antigravity"] == 1
+        assert win.pos() == old_pos, "Quota click started dragging the overlay"
+        assert win.bento_sub_ag.text() == "Semanal no publicada" or win.bento_sub_ag.text() == "Cuota semanal"
+        QTest.mouseClick(win.mini_row_ag, Qt.MouseButton.LeftButton)
+        assert win.card_display_modes["antigravity"] == 2
+        win.card_display_modes["codex"] = 0
+        QTest.mouseClick(win.bento_ai_cards["codex"]["card"], Qt.MouseButton.LeftButton)
+        assert win.card_display_modes["codex"] == 1
+        assert win.bento_ai_cards["codex"]["subtitle"].text() == "Cuota semanal"
+        QTest.mouseClick(win.mini_ai_rows["codex"]["row"], Qt.MouseButton.LeftButton)
+        assert win.card_display_modes["codex"] == 2
         win.close()
     finally:
         providers._request_json = original

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import psutil
 
-from providers.ai_usage_providers import CodexProvider, CopilotProvider, GrokProvider, CursorProvider
+from providers.ai_usage_providers import ChatGPTWebProvider, CodexProvider, CopilotProvider, GrokProvider, CursorProvider
 from providers.antigravity_provider import AntigravityProvider
 from providers.base import ProviderStatus
 from providers.lhm_provider import LHMProvider
@@ -141,6 +141,7 @@ def verify_providers() -> None:
     providers = (
         AntigravityProvider(),
         CodexProvider(),
+        ChatGPTWebProvider(),
         CopilotProvider(),
         GrokProvider(),
         CursorProvider(),
@@ -181,7 +182,7 @@ def verify_ui() -> None:
     })
     assert "144 FPS" in window.lbl_gpu_sub.text()
     assert "game" in window.lbl_ram_sub.text()
-    assert set(window.ai_cards) == {"codex", "gemini", "copilot", "grok", "cursor"}
+    assert set(window.ai_cards) == {"codex", "chatgpt_web", "gemini", "copilot", "grok", "cursor"}
     window.close()
     app.processEvents()
     print("ui: OK")

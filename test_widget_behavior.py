@@ -31,6 +31,9 @@ def main():
     assert window.bento_pill_fps.text() == "FPS --"
     assert "16.0 GB" not in window.bento_lbl_ram_sub.text()
     assert window.cyber_lbl_gpu_pwr.text() == "-- W"
+    assert window.cyber_lbl_f1_v.text() == "--"
+    assert window.cyber_lbl_f2_v.text() == "--"
+    assert window.cyber_lbl_f3_v.text() == "--"
     assert window.mini_ram_percent.text() == "0%"
     assert not any(window.cyber_spark_cpu_pwr.points), "Missing CPU power seeded a fake graph"
     assert not window._bento_fan_rows

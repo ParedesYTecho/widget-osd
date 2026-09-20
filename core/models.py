@@ -107,6 +107,7 @@ class AiModulesConfig(BaseModel):
     show_claude: bool = True
     show_antigravity: bool = True
     show_codex: bool = True
+    show_chatgpt_web: bool = True
     show_gemini: bool = False
     show_copilot: bool = True
     show_grok: bool = True
@@ -140,5 +141,5 @@ class AppConfigModel(BaseModel):
     })
     providers: dict[str, dict[str, Any]] = Field(default_factory=lambda: {
         name: {"refresh_interval_seconds": 300.0}
-        for name in ("codex", "gemini", "copilot", "grok", "cursor", "openrouter", "deepseek", "kimi", "perplexity")
+        for name in ("codex", "chatgpt_web", "gemini", "copilot", "grok", "cursor", "openrouter", "deepseek", "kimi", "perplexity")
     })

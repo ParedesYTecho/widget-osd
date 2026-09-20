@@ -111,6 +111,8 @@ class BentoCard(QFrame):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def enterEvent(self, event):
@@ -122,6 +124,7 @@ class BentoCard(QFrame):
         self._is_hovered = False
         self.update()
         super().leaveEvent(event)
+
 
     def set_accent_color(self, color: str):
         self.accent_color = color
@@ -251,6 +254,19 @@ class BentoCard(QFrame):
             super().paintEvent(event)
 
 
+class ClickableRow(QWidget):
+    """Fila compacta que cambia de ventana sin iniciar el arrastre del overlay."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class BentoWindow(QWidget):
     close_requested = Signal()
     hide_requested = Signal()
@@ -267,6 +283,7 @@ class BentoWindow(QWidget):
     CONTENT_MODES = {"all": "Todo", "hardware": "Solo hardware", "fps": "Solo FPS", "quotas": "Solo cuotas"}
 
     _EXTENDED_PROVIDER_DEFS = {
+        "chatgpt_web": ("ChatGPT Web", "#10a37f", "◉ CHATGPT WEB", "Límite Web"),
         "openrouter": ("OpenRouter", "#10b981", "◈ OPENROUTER", "Credits balance"),
         "deepseek": ("DeepSeek", "#3b82f6", "⯁ DEEPSEEK", "API balance"),
         "kimi": ("Kimi K2", "#a855f7", "▲ KIMI K2", "Moonshot balance"),
@@ -299,6 +316,7 @@ class BentoWindow(QWidget):
             "show_claude": False,
             "show_antigravity": True,
             "show_codex": True,
+            "show_chatgpt_web": True,
             "show_gemini": False,
             "show_copilot": True,
             "show_grok": True,
@@ -434,7 +452,8 @@ class BentoWindow(QWidget):
         }
 
         # 3. Minimalist Row
-        row = QWidget()
+        row = ClickableRow()
+        row.clicked.connect(lambda name=provider_id: self._cycle_card_mode(name))
         r_box = QHBoxLayout(row)
         r_box.setContentsMargins(0, 1, 0, 1)
         r_box.setSpacing(6)
@@ -748,8 +767,8 @@ class BentoWindow(QWidget):
                 col_right.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                 gauge = RingGaugeV3(size=44, stroke=4.0, arc_mode=True)
                 gauge.setCustomColor("#f59e0b")
-                gauge.setValue(96.5)
-                foot = QLabel("reset 1 Oct")
+                gauge.setValue(0.0)
+                foot = QLabel("reinicio no publicado")
                 foot.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 foot.setStyleSheet("color: #94a3b8; font-size: 10px; font-weight: 500; border: none; background: transparent;")
                 col_right.addWidget(gauge, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -1090,7 +1109,7 @@ class BentoWindow(QWidget):
                 box.addWidget(seg)
                 val = QLabel("QUOTA: --")
                 val.setStyleSheet("color: #f59e0b; font-size: 9px; font-weight: 800; font-family: monospace;")
-                reset = QLabel("RESET DATE: 1 OCT 2026")
+                reset = QLabel("RESET DATE: NO PUBLICADO")
                 reset.setStyleSheet("color: #f59e0b; font-size: 8px; font-weight: 700; font-family: monospace;")
                 box.addWidget(val)
                 box.addWidget(reset)
@@ -1386,7 +1405,7 @@ class BentoWindow(QWidget):
         c_f1.addWidget(self.cyber_lbl_f1_sub)
 
         c_f1_val_row = QHBoxLayout()
-        self.cyber_lbl_f1_v = QLabel("1720")
+        self.cyber_lbl_f1_v = QLabel("--")
         self.cyber_lbl_f1_v.setStyleSheet("color: #ffffff; font-size: 16px; font-weight: 800; font-family: monospace;")
         c_f1_rpm_lbl = QLabel("RPM")
         c_f1_rpm_lbl.setStyleSheet("color: #64748b; font-size: 9px; font-weight: 700; font-family: monospace; padding-bottom: 2px;")
@@ -1416,7 +1435,7 @@ class BentoWindow(QWidget):
         c_f2.addWidget(self.cyber_lbl_f2_sub)
 
         c_f2_val_row = QHBoxLayout()
-        self.cyber_lbl_f2_v = QLabel("920")
+        self.cyber_lbl_f2_v = QLabel("--")
         self.cyber_lbl_f2_v.setStyleSheet("color: #ffffff; font-size: 16px; font-weight: 800; font-family: monospace;")
         c_f2_rpm_lbl = QLabel("RPM")
         c_f2_rpm_lbl.setStyleSheet("color: #64748b; font-size: 9px; font-weight: 700; font-family: monospace; padding-bottom: 2px;")
@@ -1445,7 +1464,7 @@ class BentoWindow(QWidget):
         c_f3.addWidget(self.cyber_lbl_f3_sub)
 
         c_f3_val_row = QHBoxLayout()
-        self.cyber_lbl_f3_v = QLabel("0")
+        self.cyber_lbl_f3_v = QLabel("--")
         self.cyber_lbl_f3_v.setStyleSheet("color: #ffffff; font-size: 16px; font-weight: 800; font-family: monospace;")
         c_f3_rpm_lbl = QLabel("RPM")
         c_f3_rpm_lbl.setStyleSheet("color: #64748b; font-size: 9px; font-weight: 700; font-family: monospace; padding-bottom: 2px;")
@@ -1500,7 +1519,8 @@ class BentoWindow(QWidget):
         self.mini_ai_layout.setSpacing(5)
 
         # Claude Row
-        self.mini_row_claude = QWidget()
+        self.mini_row_claude = ClickableRow()
+        self.mini_row_claude.clicked.connect(lambda: self._cycle_card_mode("claude"))
         mc_box = QHBoxLayout(self.mini_row_claude)
         mc_box.setContentsMargins(0, 1, 0, 1)
         mc_box.setSpacing(6)
@@ -1515,7 +1535,8 @@ class BentoWindow(QWidget):
         self.mini_ai_layout.addWidget(self.mini_row_claude)
 
         # Antigravity Row
-        self.mini_row_ag = QWidget()
+        self.mini_row_ag = ClickableRow()
+        self.mini_row_ag.clicked.connect(lambda: self._cycle_card_mode("antigravity"))
         mag_box = QHBoxLayout(self.mini_row_ag)
         mag_box.setContentsMargins(0, 1, 0, 1)
         mag_box.setSpacing(6)
@@ -1540,7 +1561,8 @@ class BentoWindow(QWidget):
             ("grok", "Grok", "#10b981"),
             ("cursor", "Cursor", "#8b5cf6"),
         ):
-            row = QWidget()
+            row = ClickableRow()
+            row.clicked.connect(lambda name=p_id: self._cycle_card_mode(name))
             r_box = QHBoxLayout(row)
             r_box.setContentsMargins(0, 1, 0, 1)
             r_box.setSpacing(6)
@@ -1754,9 +1776,9 @@ class BentoWindow(QWidget):
         # Col 1: CPU Fan
         fn1_c = QVBoxLayout()
         fn1_c.setSpacing(0)
-        self.mini_fan1_rpm = QLabel("1720 RPM")
+        self.mini_fan1_rpm = QLabel("-- RPM")
         self.mini_fan1_rpm.setStyleSheet("color: #ffffff; font-size: 18px; font-weight: 700;")
-        self.mini_fan1_sub = QLabel("CPU · Máximo")
+        self.mini_fan1_sub = QLabel("CPU · sin datos")
         self.mini_fan1_sub.setStyleSheet("color: #64748b; font-size: 9px;")
         fn1_c.addWidget(self.mini_fan1_rpm)
         fn1_c.addWidget(self.mini_fan1_sub)
@@ -1767,9 +1789,9 @@ class BentoWindow(QWidget):
         # Col 2: Chassis Fan 1
         fn2_c = QVBoxLayout()
         fn2_c.setSpacing(0)
-        self.mini_fan2_rpm = QLabel("920 RPM")
+        self.mini_fan2_rpm = QLabel("-- RPM")
         self.mini_fan2_rpm.setStyleSheet("color: #ffffff; font-size: 18px; font-weight: 700;")
-        self.mini_fan2_sub = QLabel("Caja · Normal")
+        self.mini_fan2_sub = QLabel("Caja · sin datos")
         self.mini_fan2_sub.setStyleSheet("color: #64748b; font-size: 9px;")
         fn2_c.addWidget(self.mini_fan2_rpm)
         fn2_c.addWidget(self.mini_fan2_sub)
@@ -1780,9 +1802,9 @@ class BentoWindow(QWidget):
         # Col 3: GPU Fan
         fn3_c = QVBoxLayout()
         fn3_c.setSpacing(0)
-        self.mini_fan3_rpm = QLabel("0 RPM")
+        self.mini_fan3_rpm = QLabel("-- RPM")
         self.mini_fan3_rpm.setStyleSheet("color: #ffffff; font-size: 18px; font-weight: 700;")
-        self.mini_fan3_sub = QLabel("GPU · 0 dB")
+        self.mini_fan3_sub = QLabel("GPU · sin datos")
         self.mini_fan3_sub.setStyleSheet("color: #64748b; font-size: 9px;")
         fn3_c.addWidget(self.mini_fan3_rpm)
         fn3_c.addWidget(self.mini_fan3_sub)
@@ -1799,7 +1821,7 @@ class BentoWindow(QWidget):
     # APLICACIÓN DE VISIBILIDAD DE MÓDULOS AI
     # -----------------------------------------------------------------
     def _is_provider_visible(self, name: str) -> bool:
-        default = name in ("antigravity", "codex", "copilot", "grok", "cursor")
+        default = name in ("antigravity", "codex", "chatgpt_web", "copilot", "grok", "cursor")
         return self.content_mode in ("all", "quotas") and bool(self.ai_modules.get(f"show_{name}", default))
 
     def _apply_ai_visibility(self):
@@ -2267,8 +2289,8 @@ class BentoWindow(QWidget):
                 sub_text = "Disipador / Chasis"
 
             rpm = float(f.get("rpm", 0.0))
-            max_rpm = max(1.0, float(f.get("max_rpm") or 1800.0))
-            speed_label = str(f.get("speed_label") or ("Parado (0 dB)" if rpm <= 0 else f"{int(round((rpm / max_rpm) * 100))}%"))
+            max_rpm = float(f.get("max_rpm") or 0.0)
+            speed_label = str(f.get("speed_label") or ("Parado (0 dB)" if rpm <= 0 else "Medición en vivo"))
 
             top_col, bot_col = bar_colors[idx % len(bar_colors)]
 
@@ -2577,9 +2599,19 @@ class BentoWindow(QWidget):
             self.bento_card_ag.setToolTip(model_tooltip)
             self.cyber_card_ag.setToolTip(model_tooltip)
 
-            # Primary display is ALWAYS the 5-hour rolling window quota
-            display_rem = rem_pct
-            display_desc = five_desc or reset_desc
+            # A short reset timestamp is not a percentage. Keep it separate
+            # from the model quota unless Language Server supplied both.
+            five_rem = five_hour.get("remaining_percent")
+            model_window = windows.get("primary") or {}
+            model_desc = str(model_window.get("reset_desc") or reset_desc).strip()
+            if five_rem is not None:
+                display_rem = float(five_rem)
+                display_desc = five_desc or reset_desc
+                display_label = "Cuota 5h"
+            else:
+                display_rem = rem_pct
+                display_desc = model_desc
+                display_label = "Cuota modelo"
 
             # Bento View
             self.bento_gauge_ag.setVisible(True)
@@ -2589,12 +2621,22 @@ class BentoWindow(QWidget):
             self.bento_sub_ag.setVisible(True)
             if mode == 1:
                 # Mode 1: Weekly breakdown
-                shown_rem = float(weekly_rem) if weekly_rem is not None else display_rem
-                self.bento_val_ag.setText(f"{shown_rem:.0f}%")
-                self.bento_sub_ag.setText("Cuota semanal")
-                self.bento_gauge_ag.setValue(shown_rem)
-                self.bento_pill_ag.setText(weekly_desc or display_desc or "Semanal")
-                self.bento_foot_ag.setText(f"5h reinicia {display_desc}" if display_desc else freshness)
+                if weekly_rem is None:
+                    self.bento_val_ag.setText("--")
+                    self.bento_sub_ag.setText("Semanal no expuesta")
+                    self.bento_gauge_ag.setValue(0.0)
+                    self.bento_pill_ag.setText("--")
+                    self.bento_foot_ag.setText("Antigravity no publicó esta ventana")
+                else:
+                    shown_rem = float(weekly_rem)
+                    self.bento_val_ag.setText(f"{shown_rem:.0f}%")
+                    self.bento_sub_ag.setText("Cuota semanal")
+                    self.bento_gauge_ag.setValue(shown_rem)
+                    self.bento_pill_ag.setText(weekly_desc or "Reinicio no publicado")
+                    short_hint = f" · 5h reinicia {five_desc}" if five_rem is None and five_desc and five_desc != display_desc else ""
+                    self.bento_foot_ag.setText(
+                        f"{display_label}: {display_rem:.0f}%" + (f" · {display_desc}" if display_desc else "") + short_hint
+                    )
             elif mode == 2:
                 # Mode 2: Details / Plan info
                 plan_name = data.get("plan_name") or "Antigravity"
@@ -2606,15 +2648,18 @@ class BentoWindow(QWidget):
             else:
                 # Mode 0 (default): 5h rolling window PRIMARY
                 self.bento_val_ag.setText(f"{display_rem:.0f}%")
-                self.bento_sub_ag.setText("Cuota 5h")
+                self.bento_sub_ag.setText(display_label)
                 self.bento_gauge_ag.setValue(display_rem)
-                self.bento_pill_ag.setText(display_desc if display_desc else "5h Activa")
+                self.bento_pill_ag.setText(display_desc if display_desc else "Reinicio no publicado")
                 if weekly_rem is not None and weekly_desc:
-                    self.bento_foot_ag.setText(f"Sem {float(weekly_rem):.0f}% · {weekly_desc}")
+                    short_hint = f" · 5h reinicia {five_desc}" if five_rem is None and five_desc and five_desc != display_desc else ""
+                    self.bento_foot_ag.setText(f"Sem {float(weekly_rem):.0f}% · {weekly_desc}{short_hint}")
                 elif weekly_rem is not None:
                     self.bento_foot_ag.setText(f"Sem {float(weekly_rem):.0f}%")
+                elif five_rem is None and five_desc:
+                    self.bento_foot_ag.setText(f"Modelo reinicia {display_desc or 'sin dato'} · 5h reinicia {five_desc}")
                 else:
-                    self.bento_foot_ag.setText(f"5h reinicia {five_desc}" if five_desc else freshness)
+                    self.bento_foot_ag.setText(f"{display_label} · {display_desc}" if display_desc else freshness)
 
             self.bento_foot_ag.setWordWrap(False)
             self.bento_sub_ag.setWordWrap(False)
@@ -2626,27 +2671,59 @@ class BentoWindow(QWidget):
             self.bento_dot_ag.setVisible(False)
 
             # Cyberpunk
-            self.cyber_seg_ag.setValue(display_rem)
-            self.cyber_lbl_ag_val.setText(f"{display_rem:.0f}% CUOTA (5H)")
-            reset_parts = []
-            if display_desc:
-                reset_parts.append(f"5H RESET {display_desc}")
-            if weekly_rem is not None and weekly_desc:
-                reset_parts.append(f"SEM {weekly_desc}")
-            self.cyber_lbl_ag_reset.setText(" · ".join(reset_parts).upper() or "RESET SIN DATOS")
+            if mode == 1:
+                if weekly_rem is None:
+                    self.cyber_seg_ag.setValue(0.0)
+                    self.cyber_lbl_ag_val.setText("CUOTA SEMANAL NO PUBLICADA")
+                    self.cyber_lbl_ag_reset.setText("ANTIGRAVITY NO PUBLICÓ ESTA VENTANA")
+                else:
+                    self.cyber_seg_ag.setValue(float(weekly_rem))
+                    self.cyber_lbl_ag_val.setText(f"{float(weekly_rem):.0f}% CUOTA SEMANAL")
+                    self.cyber_lbl_ag_reset.setText(f"RESET SEMANAL: {weekly_desc or 'NO PUBLICADO'}".upper())
+            elif mode == 2:
+                self.cyber_seg_ag.setValue(display_rem)
+                self.cyber_lbl_ag_val.setText(f"{display_rem:.0f}% {data.get('plan_name') or 'ANTIGRAVITY'}")
+                self.cyber_lbl_ag_reset.setText(f"{display_label}: {display_desc or 'NO PUBLICADO'}".upper())
+            else:
+                self.cyber_seg_ag.setValue(display_rem)
+                self.cyber_lbl_ag_val.setText(f"{display_rem:.0f}% {display_label.upper()}")
+                reset_parts = []
+                if display_desc:
+                    reset_parts.append(f"{display_label} RESET {display_desc}")
+                if five_rem is None and five_desc and five_desc != display_desc:
+                    reset_parts.append(f"5H RESET {five_desc}")
+                if weekly_rem is not None and weekly_desc:
+                    reset_parts.append(f"SEM RESET {weekly_desc}")
+                self.cyber_lbl_ag_reset.setText(" · ".join(reset_parts).upper() or "RESET SIN DATOS")
 
             # Minimalist
-            self.mini_bar_ag.setValue(display_rem)
-            suffix_parts = []
-            if display_desc:
-                suffix_parts.append(f"5h {display_desc}")
-            if weekly_rem is not None and weekly_desc:
-                suffix_parts.append(f"sem {weekly_desc}")
-            suffix = f"({' · '.join(suffix_parts)})" if suffix_parts else f"({freshness.lower()})"
-            self.mini_val_ag.setText(
-                f'<span style="color:#ffffff; font-weight:700;">{display_rem:.0f}%</span> '
-                f'<span style="color:#64748b;">{suffix}</span>'
-            )
+            if mode == 1:
+                self.mini_bar_ag.setVisible(weekly_rem is not None)
+                if weekly_rem is None:
+                    self.mini_val_ag.setText('<span style="color:#64748b;">Semanal no publicada</span>')
+                else:
+                    self.mini_bar_ag.setValue(float(weekly_rem))
+                    self.mini_val_ag.setText(
+                        f'<span style="color:#ffffff; font-weight:700;">{float(weekly_rem):.0f}%</span> '
+                        f'<span style="color:#64748b;">(semanal · {weekly_desc or "sin reinicio"})</span>'
+                    )
+            else:
+                self.mini_bar_ag.setVisible(True)
+                self.mini_bar_ag.setValue(display_rem)
+                suffix_parts = []
+                if display_desc:
+                    suffix_parts.append(f"{display_label.replace('Cuota ', '')} {display_desc}")
+                if five_rem is None and five_desc and five_desc != display_desc:
+                    suffix_parts.append(f"5h {five_desc}")
+                if mode == 0 and weekly_rem is not None and weekly_desc:
+                    suffix_parts.append(f"sem {weekly_desc}")
+                if mode == 2:
+                    suffix_parts.insert(0, str(data.get('plan_name') or 'Antigravity'))
+                suffix = f"({' · '.join(suffix_parts)})" if suffix_parts else f"({freshness.lower()})"
+                self.mini_val_ag.setText(
+                    f'<span style="color:#ffffff; font-weight:700;">{display_rem:.0f}%</span> '
+                    f'<span style="color:#64748b;">{suffix}</span>'
+                )
         else:
             windows = data.get("windows") or {}
             five_desc = str((windows.get("five_hour") or {}).get("reset_desc") or "").strip()
@@ -2745,9 +2822,13 @@ class BentoWindow(QWidget):
         sec_window = windows.get("secondary", {})
         sec_rem = sec_window.get("remaining_percent")
         sec_desc = sec_window.get("reset_desc", "")
-        weekly_window = windows.get("weekly") or (sec_window if provider_name == "codex" else {})
+        weekly_window = windows.get("weekly") or windows.get("daily") or {}
         weekly_rem = weekly_window.get("remaining_percent")
         weekly_desc = str(weekly_window.get("reset_desc") or "")
+        secondary_label = str(
+            weekly_window.get("label")
+            or ("Semanal" if windows.get("weekly") else "Diaria" if windows.get("daily") else "Ventana secundaria")
+        )
 
         # --- 1. Bento Glass View ---
         if bento_item:
@@ -2763,14 +2844,33 @@ class BentoWindow(QWidget):
                 bento_item["gauge"].setVisible(False)
                 bento_item["setup"].setVisible(False)
                 bento_item["dot"].setVisible(False)
-            elif provider_name == "copilot" and count_rem is not None and count_tot is not None:
-                short_reset = reset_desc.replace(" 2026", "").replace(" 2025", "") if reset_desc else "1 Oct"
-                shown_used = float(count_used) if count_used is not None else max(0.0, float(count_tot) - float(count_rem))
-                bento_item["value"].setText(f"{shown_used:g}/{float(count_tot):g}")
+            elif provider_name == "copilot":
+                chat_rem = 100.0 - float(secondary) if secondary is not None else None
+                chat_window = windows.get("chat") or {}
+                if mode == 1:
+                    bento_item["value"].setText(f"{chat_rem:.0f}%" if chat_rem is not None else "--")
+                    bento_item["subtitle"].setText("Chat restante" if chat_rem is not None else "Chat no publicado")
+                    bento_item["foot"].setText(str(chat_window.get("reset_desc") or "Reinicio no publicado"))
+                    bento_item["gauge"].setValue(chat_rem or 0.0)
+                elif mode == 2:
+                    bento_item["value"].setText(str(data.get("plan") or "Copilot"))
+                    bento_item["subtitle"].setText("Plan verificado")
+                    bento_item["foot"].setText(reset_desc or "Reinicio no publicado")
+                    bento_item["gauge"].setValue(100.0 - used)
+                elif count_rem is not None and count_tot is not None:
+                    short_reset = reset_desc.replace(" 2026", "").replace(" 2025", "") if reset_desc else "Reinicio no publicado"
+                    shown_used = float(count_used) if count_used is not None else max(0.0, float(count_tot) - float(count_rem))
+                    bento_item["value"].setText(f"{shown_used:g}/{float(count_tot):g}")
+                    bento_item["subtitle"].setText("premium usado")
+                    bento_item["foot"].setText(short_reset)
+                    bento_item["gauge"].setValue((shown_used / float(count_tot)) * 100.0 if count_tot else 0.0)
+                else:
+                    bento_item["value"].setText(f"{remaining:.0f}%")
+                    bento_item["subtitle"].setText("Premium restante")
+                    bento_item["foot"].setText(reset_desc or "Reinicio no publicado")
+                    bento_item["gauge"].setValue(remaining)
                 bento_item["value"].setStyleSheet("color: #ffffff; font-size: 22px; font-weight: 800; border: none; background: transparent;")
-                bento_item["subtitle"].setText("premium used")
                 bento_item["subtitle"].setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: 500; border: none; background: transparent;")
-                bento_item["foot"].setText(short_reset)
                 bento_item["foot"].setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: 500; border: none; background: transparent;")
                 bento_item["value"].setVisible(True)
                 bento_item["subtitle"].setVisible(True)
@@ -2778,16 +2878,18 @@ class BentoWindow(QWidget):
                 bento_item["pill"].setVisible(False)
                 bento_item["gauge"].setVisible(True)
                 bento_item["gauge"].setCustomColor("#f59e0b")
-                bento_item["gauge"].setValue((shown_used / float(count_tot)) * 100.0 if count_tot else 0.0)
                 bento_item["setup"].setVisible(False)
                 bento_item["dot"].setVisible(False)
-            elif provider_name == "codex":
-                p_win = windows.get("primary") or {}
+            elif provider_name in ("codex", "chatgpt_web"):
+                p_win = windows.get("five_hour") or windows.get("daily") or windows.get("primary") or {
+                    "remaining_percent": remaining, "reset_desc": reset_desc, "label": label
+                }
                 rem_5h = float(p_win.get("remaining_percent", remaining))
-                desc_5h = str(p_win.get("reset_desc") or reset_desc or "4h 50m").strip()
+                desc_5h = str(p_win.get("reset_desc") or reset_desc or "").strip()
                 w_win = weekly_window or {}
                 rem_wk = w_win.get("remaining_percent")
                 desc_wk = str(w_win.get("reset_desc") or "").strip()
+                provider_label = "ChatGPT Web" if provider_name == "chatgpt_web" else "Codex Plus"
 
                 bento_item["value"].setVisible(True)
                 bento_item["subtitle"].setVisible(True)
@@ -2797,29 +2899,37 @@ class BentoWindow(QWidget):
 
                 if mode == 1:
                     # Mode 1: Weekly Quota
-                    shown_pct = float(rem_wk) if rem_wk is not None else rem_5h
-                    bento_item["value"].setText(f"{shown_pct:.0f}%")
-                    bento_item["subtitle"].setText("Cuota semanal")
-                    bento_item["gauge"].setValue(shown_pct)
-                    bento_item["pill"].setText(desc_wk or "--")
-                    bento_item["foot"].setText(f"5h: {rem_5h:.0f}% · {desc_5h}")
+                    if rem_wk is None:
+                        bento_item["value"].setText("--")
+                        bento_item["subtitle"].setText("Semanal no publicada")
+                        bento_item["gauge"].setValue(0.0)
+                        bento_item["pill"].setText("--")
+                        bento_item["foot"].setText("El proveedor no expuso esta ventana")
+                    else:
+                        shown_pct = float(rem_wk)
+                        bento_item["value"].setText(f"{shown_pct:.0f}%")
+                        bento_item["subtitle"].setText(f"Cuota {secondary_label.lower()}")
+                        bento_item["gauge"].setValue(shown_pct)
+                        bento_item["pill"].setText(desc_wk or "Reinicio no publicado")
+                        primary_label = str(p_win.get("label") or "Ventana principal")
+                        bento_item["foot"].setText(f"{primary_label}: {rem_5h:.0f}%" + (f" · {desc_5h}" if desc_5h else ""))
                 elif mode == 2:
                     # Mode 2: Details
                     bento_item["value"].setText(f"{rem_5h:.0f}%")
-                    bento_item["subtitle"].setText("Codex Plus")
+                    bento_item["subtitle"].setText(provider_label)
                     bento_item["gauge"].setValue(rem_5h)
-                    bento_item["pill"].setText(desc_5h)
+                    bento_item["pill"].setText(desc_5h or "Reinicio no publicado")
                     bento_item["foot"].setText(f"Plan: {data.get('plan') or 'Plus'}")
                 else:
                     # Mode 0 (default): 5h rolling window PRIMARY
                     bento_item["value"].setText(f"{rem_5h:.0f}%")
-                    bento_item["subtitle"].setText("Cuota 5h")
+                    bento_item["subtitle"].setText("Cuota 5h" if p_win.get("label") == "5 h" else p_win.get("label", "Ventana activa"))
                     bento_item["gauge"].setValue(rem_5h)
-                    bento_item["pill"].setText(desc_5h)
+                    bento_item["pill"].setText(desc_5h or "Reinicio no publicado")
                     if rem_wk is not None and desc_wk:
-                        bento_item["foot"].setText(f"Sem {float(rem_wk):.0f}% · {desc_wk}")
+                        bento_item["foot"].setText(f"{secondary_label} {float(rem_wk):.0f}% · {desc_wk}")
                     elif rem_wk is not None:
-                        bento_item["foot"].setText(f"Sem {float(rem_wk):.0f}%")
+                        bento_item["foot"].setText(f"{secondary_label} {float(rem_wk):.0f}%")
                     else:
                         bento_item["foot"].setText("Reinicio confirmado")
 
@@ -2932,28 +3042,56 @@ class BentoWindow(QWidget):
         # --- 2. Cyberpunk HUD View ---
         if cyber_item:
             status_w = cyber_item.get("status")
-            if provider_name == "codex":
-                p_win = windows.get("primary") or {}
+            if provider_name in ("codex", "chatgpt_web"):
+                p_win = windows.get("five_hour") or windows.get("daily") or windows.get("primary") or {
+                    "remaining_percent": remaining, "reset_desc": reset_desc, "label": label
+                }
                 rem_5h = float(p_win.get("remaining_percent", remaining))
-                desc_5h = str(p_win.get("reset_desc") or reset_desc or "PENDING").strip()
+                desc_5h = str(p_win.get("reset_desc") or reset_desc or "").strip()
                 w_win = weekly_window or {}
                 rem_wk = w_win.get("remaining_percent")
                 desc_wk = str(w_win.get("reset_desc") or "").strip()
 
                 cyber_item["seg"].setVisible(True)
-                cyber_item["seg"].setValue(rem_5h)
                 if cyber_item.get("status") is not None:
                     cyber_item["status"].setVisible(False)
-                cyber_item["val"].setText(f"{rem_5h:.0f}% QUOTA (5H)")
-                weekly_hint = f" · SEM: {float(rem_wk):.0f}% / {desc_wk}" if (rem_wk is not None and desc_wk) else (f" · SEM: {float(rem_wk):.0f}%" if rem_wk is not None else "")
-                cyber_item["reset"].setText(f"RESET 5H: {desc_5h}{weekly_hint}".upper())
+                if mode == 1:
+                    if rem_wk is None:
+                        cyber_item["seg"].setValue(0.0)
+                        cyber_item["val"].setText("VENTANA SECUNDARIA NO PUBLICADA")
+                        cyber_item["reset"].setText("EL PROVEEDOR NO EXPUSO ESTA VENTANA")
+                    else:
+                        cyber_item["seg"].setValue(float(rem_wk))
+                        cyber_item["val"].setText(f"{float(rem_wk):.0f}% CUOTA {secondary_label.upper()}")
+                        cyber_item["reset"].setText(f"RESET {secondary_label}: {desc_wk or 'NO PUBLICADO'}".upper())
+                elif mode == 2:
+                    cyber_item["seg"].setValue(rem_5h)
+                    title = "CHATGPT WEB" if provider_name == "chatgpt_web" else "CODEX PLUS"
+                    cyber_item["val"].setText(f"{rem_5h:.0f}% {title}")
+                    cyber_item["reset"].setText(f"PLAN: {data.get('plan') or 'NO PUBLICADO'}")
+                else:
+                    cyber_item["seg"].setValue(rem_5h)
+                    label_5h = p_win.get("label") or "Ventana activa"
+                    cyber_item["val"].setText(f"{rem_5h:.0f}% CUOTA ({label_5h.upper()})")
+                    weekly_hint = f" · {secondary_label.upper()}: {float(rem_wk):.0f}% / {desc_wk}" if (rem_wk is not None and desc_wk) else (f" · {secondary_label.upper()}: {float(rem_wk):.0f}%" if rem_wk is not None else "")
+                    cyber_item["reset"].setText(f"RESET {label_5h}: {desc_5h or 'NO PUBLICADO'}{weekly_hint}".upper())
             elif provider_name == "gemini":
                 gemini_pct = float(weekly_rem) if weekly_rem is not None else remaining
                 cyber_item["seg"].setValue(gemini_pct)
                 cyber_item["val"].setText(f"QUOTA: {gemini_pct:.0f}% SEMANAL" if weekly_rem is not None else f"QUOTA: {gemini_pct:.0f}% LEFT")
                 cyber_item["reset"].setText(f"RESET: {(weekly_desc or reset_desc or 'PENDING')}")
             elif provider_name == "copilot":
-                if count_rem is not None and count_tot is not None:
+                chat_rem = 100.0 - float(secondary) if secondary is not None else None
+                chat_window = windows.get("chat") or {}
+                if mode == 1:
+                    cyber_item["seg"].setValue(chat_rem or 0.0)
+                    cyber_item["val"].setText(f"{chat_rem:.0f}% CHAT RESTANTE" if chat_rem is not None else "CUOTA CHAT NO PUBLICADA")
+                    cyber_item["reset"].setText(f"RESET CHAT: {chat_window.get('reset_desc') or 'NO PUBLICADO'}".upper())
+                elif mode == 2:
+                    cyber_item["seg"].setValue(remaining)
+                    cyber_item["val"].setText(f"PLAN: {data.get('plan') or 'NO PUBLICADO'}")
+                    cyber_item["reset"].setText(f"RESET PREMIUM: {reset_desc or 'NO PUBLICADO'}".upper())
+                elif count_rem is not None and count_tot is not None:
                     shown_used = float(count_used) if count_used is not None else max(0.0, float(count_tot) - float(count_rem))
                     used_p = (shown_used / float(count_tot) * 100.0)
                     cyber_item["seg"].setValue(used_p)
@@ -2961,8 +3099,9 @@ class BentoWindow(QWidget):
                 else:
                     cyber_item["seg"].setValue(used)
                     cyber_item["val"].setText(f"QUOTA: {used:.0f}% USED")
-                r_date = reset_desc if reset_desc else "1 OCT 2026"
-                cyber_item["reset"].setText(f"RESET DATE: {r_date}".upper())
+                r_date = reset_desc or "REINICIO NO PUBLICADO"
+                if mode == 0:
+                    cyber_item["reset"].setText(f"RESET DATE: {r_date}".upper())
             elif provider_name == "grok":
                 if status_w:
                     status_w.setText("ACTIVE" if ok else "OFFLINE")
@@ -3023,29 +3162,57 @@ class BentoWindow(QWidget):
                 r_str = f" (Resets {reset_desc})" if reset_desc else ""
                 mini_item["val"].setText(f'<span style="color:#64748b; font-weight:500;">Free Web{r_str}</span>')
             elif provider_name == "copilot":
-                mini_item["bar"].setVisible(True)
-                shown_used = float(count_used) if count_used is not None else (
-                    max(0.0, float(count_tot) - float(count_rem))
-                    if count_rem is not None and count_tot is not None else used
-                )
-                used_val = (shown_used / float(count_tot) * 100.0) if count_tot else used
-                mini_item["bar"].setValue(used_val)
-                req_txt = f"{shown_used:g}/{float(count_tot):g}" if count_tot is not None else f"{used:.0f}%"
-                mini_item["val"].setText(f'<span style="color:#ffffff; font-weight:700;">{req_txt}</span> <span style="color:#64748b;">(used)</span>')
-            elif provider_name == "codex":
-                p_win = windows.get("primary") or {}
+                chat_rem = 100.0 - float(secondary) if secondary is not None else None
+                if mode == 1:
+                    mini_item["bar"].setVisible(chat_rem is not None)
+                    mini_item["bar"].setValue(chat_rem or 0.0)
+                    mini_item["val"].setText(
+                        f'<span style="color:#ffffff; font-weight:700;">{chat_rem:.0f}%</span> <span style="color:#64748b;">(chat)</span>'
+                        if chat_rem is not None else '<span style="color:#64748b;">Chat no publicado</span>'
+                    )
+                elif mode == 2:
+                    mini_item["bar"].setVisible(True)
+                    mini_item["bar"].setValue(remaining)
+                    mini_item["val"].setText(f'<span style="color:#ffffff; font-weight:700;">{data.get("plan") or "Copilot"}</span> <span style="color:#64748b;">(plan)</span>')
+                else:
+                    mini_item["bar"].setVisible(True)
+                    shown_used = float(count_used) if count_used is not None else (
+                        max(0.0, float(count_tot) - float(count_rem))
+                        if count_rem is not None and count_tot is not None else used
+                    )
+                    used_val = (shown_used / float(count_tot) * 100.0) if count_tot else used
+                    mini_item["bar"].setValue(used_val)
+                    req_txt = f"{shown_used:g}/{float(count_tot):g}" if count_tot is not None else f"{used:.0f}%"
+                    mini_item["val"].setText(f'<span style="color:#ffffff; font-weight:700;">{req_txt}</span> <span style="color:#64748b;">(used)</span>')
+            elif provider_name in ("codex", "chatgpt_web"):
+                p_win = windows.get("five_hour") or windows.get("daily") or windows.get("primary") or {
+                    "remaining_percent": remaining, "reset_desc": reset_desc, "label": label
+                }
                 rem_5h = float(p_win.get("remaining_percent", remaining))
-                desc_5h = str(p_win.get("reset_desc") or reset_desc or "pendiente").strip()
+                desc_5h = str(p_win.get("reset_desc") or reset_desc or "").strip()
                 w_win = weekly_window or {}
                 rem_wk = w_win.get("remaining_percent")
                 desc_wk = str(w_win.get("reset_desc") or "").strip()
 
-                mini_item["bar"].setVisible(True)
-                mini_item["bar"].setValue(rem_5h)
                 primary_color = "#ef4444" if rem_5h <= 0 else "#ffffff"
-                weekly_hint = f" · sem {float(rem_wk):.0f}%/{desc_wk}" if (rem_wk is not None and desc_wk) else (f" · sem {float(rem_wk):.0f}%" if rem_wk is not None else "")
-                reset_hint = f"5h {desc_5h}{weekly_hint}"
-                mini_item["val"].setText(f'<span style="color:{primary_color}; font-weight:700;">{rem_5h:.0f}%</span> <span style="color:#64748b;">({reset_hint})</span>')
+                if mode == 1:
+                    mini_item["bar"].setVisible(rem_wk is not None)
+                    if rem_wk is None:
+                        mini_item["val"].setText('<span style="color:#64748b;">Ventana secundaria no publicada</span>')
+                    else:
+                        mini_item["bar"].setValue(float(rem_wk))
+                        mini_item["val"].setText(f'<span style="color:#ffffff; font-weight:700;">{float(rem_wk):.0f}%</span> <span style="color:#64748b;">({secondary_label.lower()} · {desc_wk or "sin reinicio"})</span>')
+                elif mode == 2:
+                    mini_item["bar"].setVisible(True)
+                    mini_item["bar"].setValue(rem_5h)
+                    mini_item["val"].setText(f'<span style="color:#ffffff; font-weight:700;">{rem_5h:.0f}%</span> <span style="color:#64748b;">({data.get("plan") or "plan no publicado"})</span>')
+                else:
+                    mini_item["bar"].setVisible(True)
+                    mini_item["bar"].setValue(rem_5h)
+                    weekly_hint = f" · {secondary_label.lower()} {float(rem_wk):.0f}%/{desc_wk}" if (rem_wk is not None and desc_wk) else (f" · {secondary_label.lower()} {float(rem_wk):.0f}%" if rem_wk is not None else "")
+                    label_5h = str(p_win.get("label") or "ventana activa")
+                    reset_hint = f"{label_5h} {desc_5h or 'sin reinicio'}{weekly_hint}"
+                    mini_item["val"].setText(f'<span style="color:{primary_color}; font-weight:700;">{rem_5h:.0f}%</span> <span style="color:#64748b;">({reset_hint})</span>')
             elif provider_name == "gemini":
                 gemini_remaining = float(weekly_rem) if weekly_rem is not None else remaining
                 mini_item["bar"].setVisible(True)
@@ -3270,6 +3437,7 @@ class BentoWindow(QWidget):
             "claude": "Claude Code",
             "antigravity": "Antigravity",
             "codex": "Codex Plus",
+            "chatgpt_web": "ChatGPT Web",
             "gemini": "Gemini CLI",
             "copilot": "GitHub Copilot",
             "grok": "Grok",
@@ -3280,12 +3448,12 @@ class BentoWindow(QWidget):
             "perplexity": "Perplexity",
         }
         all_candidate_ids = (
-            "claude", "antigravity", "codex", "gemini", "copilot", "grok", "cursor",
+            "claude", "antigravity", "codex", "chatgpt_web", "gemini", "copilot", "grok", "cursor",
             "openrouter", "deepseek", "kimi", "perplexity"
         )
         for provider_id in all_candidate_ids:
             key = f"show_{provider_id}"
-            default_show = True if provider_id in ("antigravity", "codex", "copilot", "grok", "cursor") else False
+            default_show = True if provider_id in ("antigravity", "codex", "chatgpt_web", "copilot", "grok", "cursor") else False
             shown = self.ai_modules.get(key, default_show)
             label = provider_labels.get(provider_id, provider_id.title())
             action = QAction(f"{'✓ ' if shown else '   '}{label}", self)
