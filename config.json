@@ -1,0 +1,73 @@
+{
+  "hotkey": {
+    "modifiers": [
+      "ctrl"
+    ],
+    "key": "period"
+  },
+  "display": {
+    "monitor": 0,
+    "corner": "top-left",
+    "offset_x": 20,
+    "offset_y": 20
+  },
+  "ui_scale": 1.2,
+  "content_mode": "all",
+  "autostart": false,
+  "theme_style": "bento_glass",
+  "ai_modules": {
+    "show_claude": false,
+    "show_antigravity": true,
+    "show_codex": true,
+    "show_gemini": false,
+    "show_copilot": true,
+    "show_grok": true,
+    "show_cursor": true,
+    "show_openrouter": false,
+    "show_deepseek": false,
+    "show_kimi": false,
+    "show_perplexity": false
+  },
+  "fan_aliases": {},
+  "antigravity": {
+    "max_turns_5h": 60,
+    "refresh_interval_seconds": 15
+  },
+  "claude": {
+    "refresh_interval_seconds": 300,
+    "credentials_path": ""
+  },
+  "providers": {
+    "codex": {
+      "refresh_interval_seconds": 300
+    },
+    "gemini": {
+      "refresh_interval_seconds": 300
+    },
+    "copilot": {
+      "refresh_interval_seconds": 300
+    },
+    "grok": {
+      "refresh_interval_seconds": 300
+    },
+    "cursor": {
+      "refresh_interval_seconds": 300
+    },
+    "openrouter": {
+      "refresh_interval_seconds": 300,
+      "api_key": ""
+    },
+    "deepseek": {
+      "refresh_interval_seconds": 300,
+      "api_key": ""
+    },
+    "kimi": {
+      "refresh_interval_seconds": 300,
+      "api_key": ""
+    },
+    "perplexity": {
+      "refresh_interval_seconds": 300,
+      "api_key": ""
+    }
+  }
+}
