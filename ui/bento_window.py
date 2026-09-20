@@ -2386,6 +2386,27 @@ class BentoWindow(QWidget):
     # -----------------------------------------------------------------
     # ACTUALIZACIÓN DE PROVEEDORES AI (BENTO, CYBERPUNK, MINIMALIST)
     # -----------------------------------------------------------------
+    @staticmethod
+    def _antigravity_alternate_model(data: dict, primary_remaining: float | None) -> dict | None:
+        """Return one real model quota that differs from the primary value."""
+        if primary_remaining is None:
+            return None
+        for model in data.get("models") or []:
+            if not isinstance(model, dict) or model.get("remaining_percent") is None:
+                continue
+            try:
+                remaining = float(model["remaining_percent"])
+            except (TypeError, ValueError):
+                continue
+            if not 0.0 <= remaining <= 100.0 or abs(remaining - primary_remaining) < 0.05:
+                continue
+            return {
+                "label": str(model.get("label") or model.get("model_id") or "Modelo alternativo"),
+                "remaining_percent": remaining,
+                "reset_desc": str(model.get("reset_desc") or "").strip(),
+            }
+        return None
+
     def _cycle_card_mode(self, provider_id: str):
         """Cicla interactivo: 0: % remaining, 1: absolute count / 2da ventana, 2: reset countdown/fecha."""
         cur = self.card_display_modes.get(provider_id, 0)
@@ -2575,9 +2596,12 @@ class BentoWindow(QWidget):
             windows = data.get("windows") or {}
             five_hour = windows.get("five_hour") or {}
             five_desc = str(five_hour.get("reset_desc") or reset_desc).strip()
-            weekly = windows.get("weekly") or {}
+            weekly = windows.get("weekly") or windows.get("daily") or {}
             weekly_rem = weekly.get("remaining_percent")
             weekly_desc = str(weekly.get("reset_desc") or "").strip()
+            secondary_window_label = "semanal" if windows.get("weekly") else "diaria" if windows.get("daily") else "semanal"
+            secondary_window_short = "Sem" if windows.get("weekly") else "Día" if windows.get("daily") else "Sem"
+            alternate_model = self._antigravity_alternate_model(data, rem_pct)
             freshness = "Reinicio confirmado" if is_live else "Último dato · sin conexión"
             model_lines = []
             for model in data.get("models") or []:
@@ -2620,17 +2644,25 @@ class BentoWindow(QWidget):
             self.bento_val_ag.setVisible(True)
             self.bento_sub_ag.setVisible(True)
             if mode == 1:
-                # Mode 1: Weekly breakdown
+                # Mode 1: secondary verified window, or a real alternate model.
                 if weekly_rem is None:
-                    self.bento_val_ag.setText("--")
-                    self.bento_sub_ag.setText("Semanal no expuesta")
-                    self.bento_gauge_ag.setValue(0.0)
-                    self.bento_pill_ag.setText("--")
-                    self.bento_foot_ag.setText("Antigravity no publicó esta ventana")
+                    if alternate_model is None:
+                        self.bento_val_ag.setText("--")
+                        self.bento_sub_ag.setText("Semanal no expuesta")
+                        self.bento_gauge_ag.setValue(0.0)
+                        self.bento_pill_ag.setText("--")
+                        self.bento_foot_ag.setText("Antigravity no publicó esta ventana")
+                    else:
+                        alternate_rem = alternate_model["remaining_percent"]
+                        self.bento_val_ag.setText(f"{alternate_rem:.0f}%")
+                        self.bento_sub_ag.setText("Modelo alternativo")
+                        self.bento_gauge_ag.setValue(alternate_rem)
+                        self.bento_pill_ag.setText(alternate_model["reset_desc"] or "Reinicio no publicado")
+                        self.bento_foot_ag.setText(f"{alternate_model['label']}: {alternate_rem:.0f}%")
                 else:
                     shown_rem = float(weekly_rem)
                     self.bento_val_ag.setText(f"{shown_rem:.0f}%")
-                    self.bento_sub_ag.setText("Cuota semanal")
+                    self.bento_sub_ag.setText(f"Cuota {secondary_window_label}")
                     self.bento_gauge_ag.setValue(shown_rem)
                     self.bento_pill_ag.setText(weekly_desc or "Reinicio no publicado")
                     short_hint = f" · 5h reinicia {five_desc}" if five_rem is None and five_desc and five_desc != display_desc else ""
@@ -2640,11 +2672,14 @@ class BentoWindow(QWidget):
             elif mode == 2:
                 # Mode 2: Details / Plan info
                 plan_name = data.get("plan_name") or "Antigravity"
-                self.bento_val_ag.setText(f"{display_rem:.0f}%")
-                self.bento_sub_ag.setText(f"{plan_name}")
-                self.bento_gauge_ag.setValue(display_rem)
-                self.bento_pill_ag.setText(display_desc if display_desc else "5h")
-                self.bento_foot_ag.setText(freshness)
+                detail_rem = alternate_model["remaining_percent"] if alternate_model else display_rem
+                detail_label = alternate_model["label"] if alternate_model else plan_name
+                detail_desc = alternate_model["reset_desc"] if alternate_model else display_desc
+                self.bento_val_ag.setText(f"{detail_rem:.0f}%")
+                self.bento_sub_ag.setText(detail_label)
+                self.bento_gauge_ag.setValue(detail_rem)
+                self.bento_pill_ag.setText(detail_desc if detail_desc else "Reinicio no publicado")
+                self.bento_foot_ag.setText("Modelo verificado" if alternate_model else freshness)
             else:
                 # Mode 0 (default): 5h rolling window PRIMARY
                 self.bento_val_ag.setText(f"{display_rem:.0f}%")
@@ -2653,9 +2688,9 @@ class BentoWindow(QWidget):
                 self.bento_pill_ag.setText(display_desc if display_desc else "Reinicio no publicado")
                 if weekly_rem is not None and weekly_desc:
                     short_hint = f" · 5h reinicia {five_desc}" if five_rem is None and five_desc and five_desc != display_desc else ""
-                    self.bento_foot_ag.setText(f"Sem {float(weekly_rem):.0f}% · {weekly_desc}{short_hint}")
+                    self.bento_foot_ag.setText(f"{secondary_window_short} {float(weekly_rem):.0f}% · {weekly_desc}{short_hint}")
                 elif weekly_rem is not None:
-                    self.bento_foot_ag.setText(f"Sem {float(weekly_rem):.0f}%")
+                    self.bento_foot_ag.setText(f"{secondary_window_short} {float(weekly_rem):.0f}%")
                 elif five_rem is None and five_desc:
                     self.bento_foot_ag.setText(f"Modelo reinicia {display_desc or 'sin dato'} · 5h reinicia {five_desc}")
                 else:
@@ -2673,17 +2708,28 @@ class BentoWindow(QWidget):
             # Cyberpunk
             if mode == 1:
                 if weekly_rem is None:
-                    self.cyber_seg_ag.setValue(0.0)
-                    self.cyber_lbl_ag_val.setText("CUOTA SEMANAL NO PUBLICADA")
-                    self.cyber_lbl_ag_reset.setText("ANTIGRAVITY NO PUBLICÓ ESTA VENTANA")
+                    if alternate_model is None:
+                        self.cyber_seg_ag.setValue(0.0)
+                        self.cyber_lbl_ag_val.setText("CUOTA SEMANAL NO PUBLICADA")
+                        self.cyber_lbl_ag_reset.setText("ANTIGRAVITY NO PUBLICÓ ESTA VENTANA")
+                    else:
+                        alternate_rem = alternate_model["remaining_percent"]
+                        self.cyber_seg_ag.setValue(alternate_rem)
+                        self.cyber_lbl_ag_val.setText(f"{alternate_rem:.0f}% MODELO ALTERNATIVO")
+                        self.cyber_lbl_ag_reset.setText(
+                            f"{alternate_model['label']}: {alternate_model['reset_desc'] or 'RESET NO PUBLICADO'}".upper()
+                        )
                 else:
                     self.cyber_seg_ag.setValue(float(weekly_rem))
-                    self.cyber_lbl_ag_val.setText(f"{float(weekly_rem):.0f}% CUOTA SEMANAL")
-                    self.cyber_lbl_ag_reset.setText(f"RESET SEMANAL: {weekly_desc or 'NO PUBLICADO'}".upper())
+                    self.cyber_lbl_ag_val.setText(f"{float(weekly_rem):.0f}% CUOTA {secondary_window_label.upper()}")
+                    self.cyber_lbl_ag_reset.setText(f"RESET {secondary_window_label}: {weekly_desc or 'NO PUBLICADO'}".upper())
             elif mode == 2:
-                self.cyber_seg_ag.setValue(display_rem)
-                self.cyber_lbl_ag_val.setText(f"{display_rem:.0f}% {data.get('plan_name') or 'ANTIGRAVITY'}")
-                self.cyber_lbl_ag_reset.setText(f"{display_label}: {display_desc or 'NO PUBLICADO'}".upper())
+                detail_rem = alternate_model["remaining_percent"] if alternate_model else display_rem
+                detail_label = alternate_model["label"] if alternate_model else (data.get("plan_name") or "ANTIGRAVITY")
+                detail_desc = alternate_model["reset_desc"] if alternate_model else display_desc
+                self.cyber_seg_ag.setValue(detail_rem)
+                self.cyber_lbl_ag_val.setText(f"{detail_rem:.0f}% {detail_label.upper()}")
+                self.cyber_lbl_ag_reset.setText(f"{detail_desc or 'RESET NO PUBLICADO'}".upper())
             else:
                 self.cyber_seg_ag.setValue(display_rem)
                 self.cyber_lbl_ag_val.setText(f"{display_rem:.0f}% {display_label.upper()}")
@@ -2693,35 +2739,47 @@ class BentoWindow(QWidget):
                 if five_rem is None and five_desc and five_desc != display_desc:
                     reset_parts.append(f"5H RESET {five_desc}")
                 if weekly_rem is not None and weekly_desc:
-                    reset_parts.append(f"SEM RESET {weekly_desc}")
+                    reset_parts.append(f"{secondary_window_short.upper()} RESET {weekly_desc}")
                 self.cyber_lbl_ag_reset.setText(" · ".join(reset_parts).upper() or "RESET SIN DATOS")
 
             # Minimalist
             if mode == 1:
-                self.mini_bar_ag.setVisible(weekly_rem is not None)
-                if weekly_rem is None:
+                shown_rem = weekly_rem if weekly_rem is not None else (
+                    alternate_model["remaining_percent"] if alternate_model else None
+                )
+                self.mini_bar_ag.setVisible(shown_rem is not None)
+                if shown_rem is None:
                     self.mini_val_ag.setText('<span style="color:#64748b;">Semanal no publicada</span>')
-                else:
-                    self.mini_bar_ag.setValue(float(weekly_rem))
+                elif weekly_rem is None:
+                    self.mini_bar_ag.setValue(float(shown_rem))
                     self.mini_val_ag.setText(
-                        f'<span style="color:#ffffff; font-weight:700;">{float(weekly_rem):.0f}%</span> '
-                        f'<span style="color:#64748b;">(semanal · {weekly_desc or "sin reinicio"})</span>'
+                        f'<span style="color:#ffffff; font-weight:700;">{float(shown_rem):.0f}%</span> '
+                        f'<span style="color:#64748b;">(modelo alternativo · {alternate_model["label"]})</span>'
+                    )
+                else:
+                    self.mini_bar_ag.setValue(float(shown_rem))
+                    self.mini_val_ag.setText(
+                        f'<span style="color:#ffffff; font-weight:700;">{float(shown_rem):.0f}%</span> '
+                        f'<span style="color:#64748b;">({secondary_window_label} · {weekly_desc or "sin reinicio"})</span>'
                     )
             else:
                 self.mini_bar_ag.setVisible(True)
-                self.mini_bar_ag.setValue(display_rem)
+                detail_rem = alternate_model["remaining_percent"] if mode == 2 and alternate_model else display_rem
+                detail_label = alternate_model["label"] if mode == 2 and alternate_model else display_label
+                detail_desc = alternate_model["reset_desc"] if mode == 2 and alternate_model else display_desc
+                self.mini_bar_ag.setValue(detail_rem)
                 suffix_parts = []
-                if display_desc:
-                    suffix_parts.append(f"{display_label.replace('Cuota ', '')} {display_desc}")
+                if detail_desc:
+                    suffix_parts.append(f"{detail_label.replace('Cuota ', '')} {detail_desc}")
                 if five_rem is None and five_desc and five_desc != display_desc:
                     suffix_parts.append(f"5h {five_desc}")
                 if mode == 0 and weekly_rem is not None and weekly_desc:
-                    suffix_parts.append(f"sem {weekly_desc}")
+                    suffix_parts.append(f"{secondary_window_short.lower()} {weekly_desc}")
                 if mode == 2:
-                    suffix_parts.insert(0, str(data.get('plan_name') or 'Antigravity'))
+                    suffix_parts.insert(0, detail_label)
                 suffix = f"({' · '.join(suffix_parts)})" if suffix_parts else f"({freshness.lower()})"
                 self.mini_val_ag.setText(
-                    f'<span style="color:#ffffff; font-weight:700;">{display_rem:.0f}%</span> '
+                    f'<span style="color:#ffffff; font-weight:700;">{detail_rem:.0f}%</span> '
                     f'<span style="color:#64748b;">{suffix}</span>'
                 )
         else:

@@ -124,6 +124,52 @@ def main():
         zoom.actions()[0].trigger()
         assert window.ui_scale == 0.6
         window.set_content_mode("all")
+        window.card_display_modes.pop("antigravity", None)
+        window.update_antigravity({
+            "status": ProviderStatus.OK,
+            "remaining_percent": 20,
+            "reset_desc": "1h 0m",
+            "is_live": True,
+            "models": [
+                {"label": "Gemini Pro", "remaining_percent": 20, "reset_desc": "1h 0m"},
+                {"label": "Claude Sonnet", "remaining_percent": 80, "reset_desc": "4h 0m"},
+            ],
+            "windows": {"primary": {"remaining_percent": 20, "reset_desc": "1h 0m"}},
+        })
+        assert window.bento_val_ag.text() == "20%"
+        window._cycle_card_mode("antigravity")
+        assert window.bento_val_ag.text() == "80%", "Antigravity click did not select a real alternate model quota"
+        assert window.cyber_lbl_ag_val.text().startswith("80%")
+
+        window.card_display_modes["antigravity"] = 0
+        window.update_antigravity({
+            "status": ProviderStatus.OK,
+            "remaining_percent": 20,
+            "reset_desc": "1h 0m",
+            "is_live": True,
+            "windows": {
+                "primary": {"remaining_percent": 20, "reset_desc": "1h 0m"},
+                "weekly": {"remaining_percent": 65, "reset_desc": "5d 0h"},
+            },
+        })
+        window._cycle_card_mode("antigravity")
+        assert window.bento_val_ag.text() == "65%", "Antigravity weekly quota was not selected on click"
+
+        window.card_display_modes["antigravity"] = 0
+        window.update_antigravity({
+            "status": ProviderStatus.OK,
+            "remaining_percent": 20,
+            "reset_desc": "1h 0m",
+            "is_live": True,
+            "windows": {
+                "primary": {"remaining_percent": 20, "reset_desc": "1h 0m"},
+                "daily": {"remaining_percent": 55, "reset_desc": "18h 0m"},
+            },
+        })
+        window._cycle_card_mode("antigravity")
+        assert window.bento_val_ag.text() == "55%"
+        assert window.bento_sub_ag.text() == "Cuota diaria"
+
         window.apply_scale(2.0, save=False)
         controller._ensure_on_screen()
         app.processEvents()
